@@ -1,7 +1,7 @@
 from discord.ext import commands
 from discord_slash import cog_ext, SlashContext, ComponentContext
 from discord import Embed
-from discord_slash.utils.manage_components import create_button, create_actionrow
+from discord_slash.utils.manage_components import create_button, create_actionrow, create_select_option, create_select
 from discord_slash.model import ButtonStyle, SlashMessage
 from discordSuperUtils import MusicManager
 from dotenv import load_dotenv
@@ -12,6 +12,7 @@ from typing import Optional
 import time
 import discord
 from pygicord import Config, Paginator
+import functools
 
 
 class MusicBot(commands.Cog, discordSuperUtils.CogManager.Cog):
@@ -36,39 +37,75 @@ class MusicBot(commands.Cog, discordSuperUtils.CogManager.Cog):
             else duration
         )
 
-    async def send_status_embed_with_interaction(self, player, ctx):
-        song_embed = self.build_status_embed(player)
+    async def send_status_embed_with_interaction(self, ctx, player=None):
+        if player is None:
+            player = await self.music_manager.now_playing(ctx)
+        song_embed = await self.build_status_embed(ctx, player)
 
         buttons = [
             create_button(style=ButtonStyle.primary, label="<<", custom_id="prev", ),
-            create_button(style=ButtonStyle.primary, label="Play/Pause", custom_id="playpause"),
+            create_button(style=ButtonStyle.primary, label="Play / Pause", custom_id="playpause"),
             create_button(style=ButtonStyle.primary, label=">>", custom_id="next"),
-            create_button(style=ButtonStyle.secondary, emoji="❌", custom_id="leave")
+
+        ]
+
+        buttons2 = [
+            create_button(style=ButtonStyle.secondary, emoji="🔀", custom_id="shuffle"),
+            create_button(style=ButtonStyle.secondary, label="Show Queue", custom_id="queue"),
+            create_button(style=ButtonStyle.secondary, emoji="❌", custom_id="leave"),
+        ]
+
+        buttons3 = [
+            create_button(style=ButtonStyle.secondary, emoji="🔁", custom_id="loop")
         ]
 
         song_components = create_actionrow(*buttons)
+        song_components2 = create_actionrow(*buttons2)
+        song_components3 = create_actionrow(*buttons3)
 
-        self.music_status_msg = await ctx.send(embed=song_embed, components=[song_components])
+        self.music_status_msg = await ctx.send(embed=song_embed, components=[song_components, song_components2, song_components3])
 
-    def build_status_embed(self, player) -> discord.Embed:
-        return Embed(
-            type="rich",
-            title="Music Bot",
-            description="",
-            color=0xb477c1,
-        ).add_field(
-            name="Current Song",
-            value=f"[{player}]({player.url})",
-            inline=False,
-        ).add_field(
-            name="Duration",
-            value=self.__format_duration(player.duration),
-            inline=False,
-        )
+    async def build_status_embed(self, ctx, player) -> discord.Embed:
+        if queue := await self.music_manager.get_queue(ctx):
+            loop = queue.loop
+            shuffle = queue.shuffle
 
-    async def update_status_embed(self, player):
+            return Embed(
+                type="rich",
+                title="Music Bot",
+                description="",
+                color=0xb477c1,
+            ).add_field(
+                name="Current Song",
+                value=f"[{player}]({player.url})",
+                inline=False,
+            ).add_field(
+                name="Duration",
+                value=f"{self.__format_duration(await self.music_manager.get_player_played_duration(ctx, player))}/"
+                      f"{self.__format_duration(player.duration)}",
+                inline=False,
+            ).add_field(
+                name="\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_\\_",
+                value=f"\n{'**Loop: ** :white_check_mark:' if loop == discordSuperUtils.Loops.LOOP else ''}"
+                      f"{'**Queue Loop: **:white_check_mark:' if loop == discordSuperUtils.Loops.QUEUE_LOOP else ''}"
+                      f"\n**Shuffle**: {':white_check_mark:' if shuffle else ':x:'}",
+                inline=False
+            ).add_field(
+                name="Requester:",
+                value=player.requester and player.requester.mention
+            )
+
+    async def update_status_embed(self, ctx, player=None):
         msg: SlashMessage = self.music_status_msg
-        await msg.edit(embed=self.build_status_embed(player))
+        if player is None:
+            player = await self.music_manager.now_playing(ctx)
+
+        await msg.edit(embed=await self.build_status_embed(ctx, player))
+
+    async def resend_status_embed(self, ctx):
+        # await self.music_status_msg.delete()
+        self.music_status_msg = None
+        await self.send_status_embed_with_interaction(ctx)
 
     @cog_ext.cog_slash(
         name="join",
@@ -95,12 +132,29 @@ class MusicBot(commands.Cog, discordSuperUtils.CogManager.Cog):
 
         player = await self.music_manager.create_player(song, ctx.author)
 
-        if await self.music_manager.queue_add(
+        if not await self.music_manager.queue_add(
                 players=player, ctx=ctx
-        ) and not await self.music_manager.play(ctx):
-            await ctx.send(StatusMessages.Status.value.added_to_queue.value)
-        # else:
-        #    await ctx.send(StatusMessages.Errors.value.query_not_found.value)
+        ) or not await self.music_manager.play(ctx):
+            await ctx.send(StatusMessages.Errors.value.query_not_found.value)
+        else:
+            await ctx.send(embed=Embed(
+                type="rich",
+                title="Music Bot",
+                description="",
+                color=0xb477c1,
+            ).add_field(
+                name=StatusMessages.Status.value.added_to_queue.value,
+                value=song,
+                inline=False
+            ).add_field(
+                name="Requester:",
+                value=ctx.author and ctx.author.mention,
+                inline=False
+            )
+            )
+
+            if self.music_status_msg is not None:
+                await self.resend_status_embed(ctx)
 
     @cog_ext.cog_slash(
         name="skip",
@@ -128,6 +182,41 @@ class MusicBot(commands.Cog, discordSuperUtils.CogManager.Cog):
     async def pause(self, ctx):
         await self.pause_bot(ctx)
 
+    @cog_ext.cog_slash(
+        name="leave",
+        description="The bot leaves :("
+    )
+    async def leave(self, ctx: SlashContext):
+        await self.leave_bot(ctx)
+
+    @cog_ext.cog_slash(
+        name="queue",
+        description="Shows the music queue"
+    )
+    async def queue(self, ctx: SlashContext):
+        await self.queue_bot(ctx)
+
+    @cog_ext.cog_slash(
+        name="history",
+        description="Shows the played songs"
+    )
+    async def history(self, ctx: SlashContext):
+        await self.history_bot(ctx)
+
+    @cog_ext.cog_slash(
+        name="clear",
+        description="Clears the queue"
+    )
+    async def clear(self, ctx: SlashContext):
+        await self.clear_bot(ctx)
+
+    @cog_ext.cog_slash(
+        name="loop",
+        description="Loops the song"
+    )
+    async def loop(self, ctx: SlashContext):
+        await self.loop_bot(ctx)
+
     @cog_ext.cog_component(components="playpause")
     async def playpause_interaction(self, ctx: ComponentContext):
         if self.music_paused:
@@ -147,19 +236,17 @@ class MusicBot(commands.Cog, discordSuperUtils.CogManager.Cog):
     async def leave_interaction(self, ctx: ComponentContext):
         await self.leave_bot(ctx)
 
-    @cog_ext.cog_slash(
-        name="leave",
-        description="The bot leaves :("
-    )
-    async def leave(self, ctx: SlashContext):
-        await self.leave_bot(ctx)
+    @cog_ext.cog_component(components="shuffle")
+    async def shuffle_interaction(self, ctx: ComponentContext):
+        await self.shuffle_bot(ctx)
 
-    @cog_ext.cog_slash(
-        name="queue",
-        description="Shows the music queue"
-    )
-    async def queue(self, ctx: SlashContext):
+    @cog_ext.cog_component(components="queue")
+    async def queue_interaction(self, ctx: ComponentContext):
         await self.queue_bot(ctx)
+
+    @cog_ext.cog_component(components="loop")
+    async def loop_interaction(self, ctx: ComponentContext):
+        await self.loop_bot(ctx)
 
     @discordSuperUtils.CogManager.event(discordSuperUtils.MusicManager)
     async def on_music_error(self, ctx, error):
@@ -186,9 +273,9 @@ class MusicBot(commands.Cog, discordSuperUtils.CogManager.Cog):
     @discordSuperUtils.CogManager.event(discordSuperUtils.MusicManager)
     async def on_play(self, ctx, player):
         if self.music_status_msg is None:
-            await self.send_status_embed_with_interaction(player, ctx)
+            await self.send_status_embed_with_interaction(ctx, player)
         else:
-            await self.update_status_embed(player)
+            await self.update_status_embed(ctx, player)
 
     @discordSuperUtils.CogManager.event(discordSuperUtils.MusicManager)
     async def on_queue_end(self, ctx):
@@ -196,28 +283,42 @@ class MusicBot(commands.Cog, discordSuperUtils.CogManager.Cog):
 
     @discordSuperUtils.CogManager.event(discordSuperUtils.MusicManager)
     async def on_activity_disconnect(self, ctx):
-        pass
+        await self.leave_bot(ctx, True)
 
     async def join_bot(self, ctx):
         self.voice_channel = await self.music_manager.join(ctx)
 
     async def skip_bot(self, ctx, index: int = None):
+        if not await self.is_in_channel(ctx):
+            return
+
         if skipped_player := await self.music_manager.skip(ctx, index):
-            await self.update_status_embed(skipped_player)
+            await self.update_status_embed(ctx, skipped_player)
             await ctx.send("Skipped!", delete_after=5)
 
     async def prev_bot(self, ctx):
-        await self.music_manager.previous(ctx)
-        await ctx.send("Previous")
+        if not await self.is_in_channel(ctx):
+            return
+
+        if await self.music_manager.previous(ctx):
+            await ctx.send("Previous", delete_after=5)
 
     async def shuffle_bot(self, ctx):
-        shuffle = await self.music_manager.shuffle(ctx)
-        await ctx.send(StatusMessages.Status.value.shuffle_enabled.value
-                       if shuffle else StatusMessages.Status.value.shuffle_disabled.value)
+        if not await self.is_in_channel(ctx):
+            return
+
+        if await self.music_manager.now_playing(ctx):
+            shuffle = await self.music_manager.shuffle(ctx)
+            await ctx.send(StatusMessages.Status.value.shuffle_enabled.value
+                           if shuffle else StatusMessages.Status.value.shuffle_disabled.value, delete_after=5)
+            await self.update_status_embed(ctx)
 
     async def queue_bot(self, ctx):
+        if not await self.is_in_channel(ctx):
+            return
+
         if queue := await self.music_manager.get_queue(ctx):
-            formatted_queue = [f"Title: {s.title}" for s in queue.queue[1:]]
+            formatted_queue = [f"**{s.title}**\nLänge: {self.__format_duration(s.duration)}" for s in queue.queue[1:]]
 
             embeds = discordSuperUtils.generate_embeds(
                 formatted_queue,
@@ -229,28 +330,95 @@ class MusicBot(commands.Cog, discordSuperUtils.CogManager.Cog):
 
             page_manager = Paginator(pages=embeds, config=Config.PLAIN)
             await page_manager.start(ctx)
+            await self.resend_status_embed(ctx)
+
+    async def history_bot(self, ctx):
+        if not await self.is_in_channel(ctx):
+            return
+
+        if queue := await self.music_manager.get_queue(ctx):
+            formatted_history = [
+                f"**{s.title}\nRequester: {s.requester and s.requester.mention}"
+                for s in queue.history
+            ]
+
+            embeds = discordSuperUtils.generate_embeds(
+                formatted_history,
+                "History",
+                f"Shows all played songs",
+                10,
+                string_format="{}"
+            )
+
+            page_manager = Paginator(pages=embeds, config=Config.PLAIN)
+            await page_manager.start(ctx)
 
     async def pause_bot(self, ctx):
-        self.music_paused = True
-        await self.music_manager.pause(ctx)
-        await ctx.send("Paused", delete_after=5)
+        if not await self.is_in_channel(ctx):
+            return
+
+        if await self.music_manager.pause(ctx):
+            await ctx.send("Paused", delete_after=5)
+            self.music_paused = True
 
     async def play_bot(self, ctx):
-        self.music_paused = False
-        await self.music_manager.resume(ctx)
-        await ctx.send("Play", delete_after=5)
+        if not await self.is_in_channel(ctx):
+            return
 
-    async def leave_bot(self, ctx):
-        await self.music_manager.leave(ctx)
+        if await self.music_manager.resume(ctx):
+            await ctx.send("Play", delete_after=5)
+            self.music_paused = False
 
-        msg: discord.Message = self.music_status_msg
-        await msg.delete()
+    async def leave_bot(self, ctx, inactivity=False):
+        if not await self.is_in_channel(ctx):
+            return
 
-        self.voice_channel = None
-        self.music_paused = False
-        self.music_status_msg = None
+        if await self.music_manager.leave(ctx):
 
-        await ctx.send("Bye :cry:", delete_after=10)
+            msg: discord.Message = self.music_status_msg
+            await msg.delete()
+
+            self.voice_channel = None
+            self.music_paused = False
+            self.music_status_msg = None
+
+            if inactivity:
+                await ctx.send("Left because of inactivity :(")
+            else:
+                await ctx.send("Bye :cry:", delete_after=10)
+
+    async def loop_bot(self, ctx):
+        if not await self.is_in_channel(ctx):
+            return
+
+        if await self.music_manager.now_playing(ctx):
+            loop = await self.music_manager.loop(ctx)
+            await ctx.send(StatusMessages.Status.value.loop_enabled.value
+                           if loop else StatusMessages.Status.value.loop_disabled.value, delete_after=5)
+            await self.update_status_embed(ctx)
+
+    async def is_in_channel(self, ctx):
+        if ctx.author.voice.channel.id != self.voice_channel.id:
+            await ctx.send("You're not in the same channel as the bot!")
+            return False
+        return True
+
+    async def clear_bot(self, ctx):
+        if not await self.is_in_channel(ctx):
+            return
+
+        queue = await self.music_manager.get_queue(ctx)
+        queue.clear()
+        await ctx.send(embed=Embed(
+            type="rich",
+            title="Music Bot",
+            description="",
+            color=0xb477c1,
+        ).add_field(
+            name="Cleared the queue!",
+            value=ctx.author and ctx.author.mention,
+            inline=False
+        ))
 
 
 def setup(bot: commands.Bot):

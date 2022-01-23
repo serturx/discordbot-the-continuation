@@ -15,8 +15,6 @@ class _Errors(Enum):
     query_not_found = "Couldn't find the song"
 
 
-
-
 class _Status(Enum):
     connecting_to_voice = "Connecting..."
     queue_finished_playing = "Finished playing the queue!"
@@ -24,6 +22,8 @@ class _Status(Enum):
     added_to_queue = "Added to queue!"
     shuffle_enabled = "Shuffle is now enabled"
     shuffle_disabled = "Shuffle is now disabled"
+    loop_enabled = "Song Loop is now enabled"
+    loop_disabled = "Song Loop is now disabled"
 
 
 class StatusMessages(Enum):
