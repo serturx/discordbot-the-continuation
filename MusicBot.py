@@ -1,18 +1,18 @@
-from discord.ext import commands
-from discord_slash import cog_ext, SlashContext, ComponentContext
-from discord import Embed
-from discord_slash.utils.manage_components import create_button, create_actionrow, create_select_option, create_select
-from discord_slash.model import ButtonStyle, SlashMessage
-from discordSuperUtils import MusicManager
-from dotenv import load_dotenv
-from os import getenv
-import discordSuperUtils
-from StatusMessages import StatusMessages
-from typing import Optional
 import time
+from os import getenv
+from typing import Optional
+
 import discord
+import discordSuperUtils
+from discord import Embed
+from discord.ext import commands
+from discordSuperUtils import MusicManager
+from discord_slash import cog_ext, SlashContext, ComponentContext
+from discord_slash.model import ButtonStyle, SlashMessage
+from discord_slash.utils.manage_components import create_button, create_actionrow
 from pygicord import Config, Paginator
-import functools
+
+from StatusMessages import StatusMessages
 
 
 class MusicBot(commands.Cog, discordSuperUtils.CogManager.Cog):
@@ -134,9 +134,10 @@ class MusicBot(commands.Cog, discordSuperUtils.CogManager.Cog):
 
         if not await self.music_manager.queue_add(
                 players=player, ctx=ctx
-        ) or not await self.music_manager.play(ctx):
+        ):
             await ctx.send(StatusMessages.Errors.value.query_not_found.value)
         else:
+            await self.music_manager.play(ctx)
             await ctx.send(embed=Embed(
                 type="rich",
                 title="Music Bot",
@@ -150,8 +151,7 @@ class MusicBot(commands.Cog, discordSuperUtils.CogManager.Cog):
                 name="Requester:",
                 value=ctx.author and ctx.author.mention,
                 inline=False
-            )
-            )
+            ))
 
             if self.music_status_msg is not None:
                 await self.resend_status_embed(ctx)
