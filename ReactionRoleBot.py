@@ -39,8 +39,10 @@ class ReactionRoleBot(commands.Cog):
                 else:
                     print("Error: Role not found")
 
-    @cog_ext.permission(865264006326779914, create_permission(915369038811656203, SlashCommandPermissionType.ROLE, True))
-    @cog_ext.permission(811342158858027018, create_permission(811342455920263269, SlashCommandPermissionType.ROLE, True))
+    @cog_ext.permission(865264006326779914,
+                        create_permission(915369038811656203, SlashCommandPermissionType.ROLE, True))
+    @cog_ext.permission(811342158858027018,
+                        create_permission(811342455920263269, SlashCommandPermissionType.ROLE, True))
     @cog_ext.cog_slash(
         name="init_role_emoji_bot",
         description="Sends the role add and remove message."
@@ -57,6 +59,10 @@ class ReactionRoleBot(commands.Cog):
         self.save_roles()
         await self.react_all_roles(ctx)
 
+    @cog_ext.permission(865264006326779914,
+                        create_permission(915369038811656203, SlashCommandPermissionType.ROLE, True))
+    @cog_ext.permission(811342158858027018,
+                        create_permission(811342455920263269, SlashCommandPermissionType.ROLE, True))
     @cog_ext.cog_slash(
         name="add_role_emoji",
         description="Adds a new role-emoji association",
@@ -80,6 +86,10 @@ class ReactionRoleBot(commands.Cog):
         self.save_roles()
         await ctx.send(f"Associated {emoji} with {role}")
 
+    @cog_ext.permission(865264006326779914,
+                        create_permission(915369038811656203, SlashCommandPermissionType.ROLE, True))
+    @cog_ext.permission(811342158858027018,
+                        create_permission(811342455920263269, SlashCommandPermissionType.ROLE, True))
     @cog_ext.cog_slash(
         name="remove_role_emoji",
         description="Removes a role-emoji association ",
