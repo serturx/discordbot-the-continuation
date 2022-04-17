@@ -9,7 +9,7 @@ from discord_slash.model import SlashCommandPermissionType
 
 admin_roles = [915369038811656203, 811342455920263269]
 
-def check_admin_permissions(ctx: SlashContext):
+async def check_admin_permissions(ctx: SlashContext):
     for role in ctx.author.roles:
         if role.id in admin_roles:
             return True
