@@ -54,7 +54,7 @@ class ReactionRoleBot(commands.Cog):
         description="Sends the role add and remove message."
     )
     async def init_role_emoji_bot(self, ctx: SlashContext):
-        if not check_admin_permissions(ctx): return
+        if not await check_admin_permissions(ctx): return
         await ctx.send("Sending Role Bot Messages", delete_after=10)
         add_id = (await self.send_role_message(ctx)).id
         remove_id = (await self.send_role_message(ctx, remove=True)).id
@@ -85,7 +85,7 @@ class ReactionRoleBot(commands.Cog):
         ]
     )
     async def add_role_emoji(self, ctx: SlashContext, emoji, role: discord.Role):
-        if not check_admin_permissions(ctx): return
+        if not await check_admin_permissions(ctx): return
         self.roles[str(ctx.guild_id)]["roles"][emoji] = role.name
         self.save_roles()
         await ctx.send(f"Associated {emoji} with {role}")
@@ -103,7 +103,7 @@ class ReactionRoleBot(commands.Cog):
         ]
     )
     async def remove_role_emoji(self, ctx: SlashContext, role: discord.Role):
-        if not check_admin_permissions(ctx): return
+        if not await check_admin_permissions(ctx): return
         role = role.name
         if role in self.roles[str(ctx.guild_id)]:
             del self.roles[str(ctx.guild_id)]
@@ -113,7 +113,7 @@ class ReactionRoleBot(commands.Cog):
             await ctx.send("Couldn't find the role to remove")
 
     async def send_role_message(self, ctx: SlashContext, remove=False):
-        if not check_admin_permissions(ctx): return
+        if not await check_admin_permissions(ctx): return
         role_ctx = self.get_ctx(ctx.guild_id)
         embed = Embed(
             type="rich",
