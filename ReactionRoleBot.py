@@ -14,7 +14,7 @@ def check_admin_permissions(ctx: SlashContext):
         if role.id in admin_roles:
             return True
 
-    ctx.send("You don't have the permissions to perform this action.")
+    await ctx.send("You don't have the permissions to perform this action.")
     return False
 
 class ReactionRoleBot(commands.Cog):
