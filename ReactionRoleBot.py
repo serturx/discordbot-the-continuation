@@ -7,6 +7,16 @@ from discord_slash.utils.manage_commands import create_permission
 from discord_slash.model import SlashCommandPermissionType
 
 
+admin_roles = [915369038811656203, 811342455920263269]
+
+def check_admin_permissions(ctx: SlashContext):
+    for role in ctx.author.roles:
+        if role.id in admin_roles:
+            return True
+
+    ctx.send("You don't have the permissions to perform this action.")
+    return False
+
 class ReactionRoleBot(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -39,15 +49,12 @@ class ReactionRoleBot(commands.Cog):
                 else:
                     print("Error: Role not found")
 
-    @cog_ext.permission(865264006326779914,
-                        create_permission(915369038811656203, SlashCommandPermissionType.ROLE, True))
-    @cog_ext.permission(811342158858027018,
-                        create_permission(811342455920263269, SlashCommandPermissionType.ROLE, True))
     @cog_ext.cog_slash(
         name="init_role_emoji_bot",
         description="Sends the role add and remove message."
     )
     async def init_role_emoji_bot(self, ctx: SlashContext):
+        if not check_admin_permissions(ctx): return
         await ctx.send("Sending Role Bot Messages", delete_after=10)
         add_id = (await self.send_role_message(ctx)).id
         remove_id = (await self.send_role_message(ctx, remove=True)).id
@@ -59,10 +66,6 @@ class ReactionRoleBot(commands.Cog):
         self.save_roles()
         await self.react_all_roles(ctx)
 
-    @cog_ext.permission(865264006326779914,
-                        create_permission(915369038811656203, SlashCommandPermissionType.ROLE, True))
-    @cog_ext.permission(811342158858027018,
-                        create_permission(811342455920263269, SlashCommandPermissionType.ROLE, True))
     @cog_ext.cog_slash(
         name="add_role_emoji",
         description="Adds a new role-emoji association",
@@ -82,14 +85,11 @@ class ReactionRoleBot(commands.Cog):
         ]
     )
     async def add_role_emoji(self, ctx: SlashContext, emoji, role: discord.Role):
+        if not check_admin_permissions(ctx): return
         self.roles[str(ctx.guild_id)]["roles"][emoji] = role.name
         self.save_roles()
         await ctx.send(f"Associated {emoji} with {role}")
 
-    @cog_ext.permission(865264006326779914,
-                        create_permission(915369038811656203, SlashCommandPermissionType.ROLE, True))
-    @cog_ext.permission(811342158858027018,
-                        create_permission(811342455920263269, SlashCommandPermissionType.ROLE, True))
     @cog_ext.cog_slash(
         name="remove_role_emoji",
         description="Removes a role-emoji association ",
@@ -103,6 +103,7 @@ class ReactionRoleBot(commands.Cog):
         ]
     )
     async def remove_role_emoji(self, ctx: SlashContext, role: discord.Role):
+        if not check_admin_permissions(ctx): return
         role = role.name
         if role in self.roles[str(ctx.guild_id)]:
             del self.roles[str(ctx.guild_id)]
@@ -112,6 +113,7 @@ class ReactionRoleBot(commands.Cog):
             await ctx.send("Couldn't find the role to remove")
 
     async def send_role_message(self, ctx: SlashContext, remove=False):
+        if not check_admin_permissions(ctx): return
         role_ctx = self.get_ctx(ctx.guild_id)
         embed = Embed(
             type="rich",
